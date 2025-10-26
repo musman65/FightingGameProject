@@ -1,0 +1,321 @@
+--Modules
+local GIM = require(game.ReplicatedStorage.Modules.GlobalInfo)
+local DictionaryHandler = require(game.ServerScriptService.Library.DictionaryHandler)
+local stunModule = require(game.ServerScriptService.Stun)
+
+--Services
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+
+--Finals
+local hitboxDurationM1 = GIM.getHitboxDurationM1()
+local stunDurationM1 = GIM.getStunDurationM1()
+local damageM1 = GIM.getDamageM1()
+
+local stunDurationBlockBreak = GIM.getStunDurationBlockBreak()
+local damageHeavyPunch = GIM.getDamageHeavyPunch()
+local heavyPunchBlockBreak = GIM.getHeavyPunchBlockBreak()
+
+local parryStun = GIM.getParryStun()
+
+local ceroSize = GIM.getCeroSize()
+local ceroDuration = GIM.getCeroDuration()
+local ceroExpandDuration = GIM.getCeroExpandDuration()
+local ceroFadeAwayDuration = GIM.getCeroFadeAwayDuration()
+
+
+function doDamage(char, damage, delayOnTheHitbox, blockBreak, specialHitBox : Part, duration, weld)
+	if blockBreak == nil then
+		blockBreak = false
+	end
+	
+	if duration == nil then
+		duration = hitboxDurationM1
+	end
+	
+	if delayOnTheHitbox == nil then
+		delayOnTheHitbox = 0
+	end
+	
+	local hitbox
+	local specialHitboxLocation = nil
+	
+	if specialHitBox == nil then
+		hitbox = game.ReplicatedStorage.Hitboxes.Punch:Clone()
+		local hrp = char.HumanoidRootPart
+		
+		task.wait(delayOnTheHitbox)
+		
+		hitbox.Parent = game.Workspace.HitboxClones
+		if game.Workspace.TestingTransparencyPart.BrickColor == BrickColor.new("Really red") then
+			hitbox.Transparency = 0.4
+		else
+			hitbox.Transparency = 1
+		end
+		hitbox.CFrame = char.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = hitbox
+		weld.Part1 = char.HumanoidRootPart
+		weld.Parent = hitbox
+		game.Debris:AddItem(hitbox, hitboxDurationM1)
+	else
+		hitbox = specialHitBox:Clone()
+		local hrp = char.HumanoidRootPart
+
+		task.wait(delayOnTheHitbox)
+		
+		hitbox.Parent = game.Workspace.HitboxClones
+		if game.Workspace.TestingTransparencyPart.BrickColor == BrickColor.new("Really red") then
+			hitbox.Transparency = 0.4
+		else
+			hitbox.Transparency = 1
+		end
+		
+		local hitBoxDirection = (specialHitBox.Size.X / 2)
+		hitbox.CFrame = char.HumanoidRootPart.CFrame * (CFrame.new(0, 0, -hitBoxDirection)) * CFrame.Angles(0, math.rad(90), 0)
+		specialHitboxLocation = char.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3) * CFrame.Angles(0, math.rad(90), 0)
+		
+		if weld then
+			local weld = Instance.new("WeldConstraint")
+			weld.Part0 = hitbox
+			weld.Part1 = char.HumanoidRootPart
+			weld.Parent = hitbox
+		else
+			hitbox.Anchored = true
+		end
+		
+		game.Debris:AddItem(hitbox, duration)
+	end
+
+	local alreadyHit = {}
+
+	hitbox.Touched:Connect(function(hit)
+		if hit:IsA("BasePart") then
+			if not hit:IsDescendantOf(char) then
+				local enemyHumanoid : Humanoid = hit.Parent:FindFirstChild("Humanoid")
+				local enemyHRP : Part = hit.Parent:FindFirstChild("HumanoidRootPart")
+				
+				if enemyHumanoid and enemyHRP then
+					local enemyPlayer : Player = game.Players:GetPlayerFromCharacter(hit.Parent)
+					if not enemyPlayer then return end
+					
+					local playerDataManager = require(game.ServerScriptService.ServerModules.PlayerDataManager)
+					local enemyPlayerData_RO = playerDataManager:getReadOnly(enemyPlayer)
+					local charPlayer = game.Players:GetPlayerFromCharacter(char)
+					
+					--local enemyLI = require(enemyPlayer.Backpack.LocalInfo)
+					--local charLI = require(game.Players:GetPlayerFromCharacter(char).Backpack.LocalInfo)
+					
+					if enemyPlayerData_RO.isParrying == true and not table.find(alreadyHit, char) then
+						table.find(alreadyHit, char) --why is this here?
+						hitbox:Destroy()
+						local sounds = game.ReplicatedStorage.Sounds
+						sounds.Parry:Play()
+						playerDataManager:getOriginalPlayerDataTable(charPlayer).parried = true
+						task.spawn(function()
+							stunModule.stunPlayer(char, parryStun, true, false, true)
+						end)
+						task.wait(parryStun)
+						playerDataManager:getOriginalPlayerDataTable(charPlayer).parried = false
+						return
+					else
+						if not DictionaryHandler.findPlayer(enemyHumanoid, "Blocking") and not table.find(alreadyHit, enemyHumanoid) then
+							table.insert(alreadyHit, enemyHumanoid)
+							enemyHumanoid:TakeDamage(damage)
+							stunModule.stunPlayer(hit.Parent, stunDurationM1)
+						elseif DictionaryHandler.findPlayer(enemyHumanoid, "Blocking") and not table.find(alreadyHit, enemyHumanoid) and blockBreak then
+							table.insert(alreadyHit, enemyHumanoid)
+							if game.Players:GetPlayerFromCharacter(hit.Parent) then
+								game.ReplicatedStorage.Blocking:FireClient(game.Players:GetPlayerFromCharacter(hit.Parent), true)
+							end --If its not, that means its a blocking dummy
+							DictionaryHandler.removeFrom(enemyHumanoid, "Blocking")
+							for i, v in enemyHumanoid:FindFirstChild("Animator"):GetPlayingAnimationTracks() do 
+								if v.Name == "Block" then
+									v:Stop()
+								end
+							end
+							enemyHumanoid:TakeDamage(damage)
+							stunModule.stunPlayer(hit.Parent, stunDurationBlockBreak, true, true)
+						end
+					end
+				end 
+			end
+		end
+	end)
+	
+	return specialHitboxLocation
+end
+
+game.ReplicatedStorage.Cero.OnServerEvent:Connect(function(player)
+	local hum : Humanoid = player.Character:FindFirstChild("Humanoid")
+	if not DictionaryHandler.findPlayer(hum, "Blocking") and not DictionaryHandler.findPlayer(hum, "Stunned") and not DictionaryHandler.findPlayer(hum, "Busy") then
+		DictionaryHandler.addTo(hum, "Busy")
+		local pos = doDamage(player.Character, 25, 0, false, game.ReplicatedStorage.Hitboxes.CeroHitbox, ceroDuration)
+		ReplicatedStorage.Cero:FireAllClients(player.Character, pos)
+		task.wait(ceroDuration)
+		DictionaryHandler.removeFrom(hum, "Busy")
+	end
+end)
+
+game.ReplicatedStorage.CombatHit.OnServerEvent:Connect(function(player, comSeq)
+	local char = player.Character
+	local hum = char:FindFirstChild("Humanoid")
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	local playerDataManager = require(game.ServerScriptService.ServerModules.PlayerDataManager)
+	local charPlayerData_RO = playerDataManager:getReadOnly(player)
+	--local LI = require(player.Backpack.LocalInfo)
+	
+	if not DictionaryHandler.findPlayer(hum, "Stunned") and not DictionaryHandler.findPlayer(hum, "Blocking") and not DictionaryHandler.findPlayer(hum, "Busy") then
+		DictionaryHandler.addTo(hum, "Busy")
+		doDamage(char, damageM1)
+		local sounds = game.ReplicatedStorage.Sounds
+		local animations = player.Backpack.CombatClient.Animations
+		local anims = {
+			["L"] = animations.Punch,
+			["LL"] = animations.Punch2,
+			["LLL"] = animations.Punch3
+		}
+		local punchSound = sounds.Punch
+		local animator : Animator = player.Character.Humanoid.Animator
+		
+		if animator then
+			local anim = animator:LoadAnimation(anims[comSeq])
+			anim:Play()
+			punchSound:Play()
+			hum.WalkSpeed = 3
+			hum.JumpPower = 0
+			game.ReplicatedStorage.CombatHit:FireClient(player, true)
+			
+			task.wait(0.5)
+			if charPlayerData_RO.parried == false then
+				hum.WalkSpeed = 16
+				hum.JumpPower = 50
+			end
+			DictionaryHandler.removeFrom(hum, "Busy")
+		end
+	else
+		--print(DictionaryHandler.findPlayer(hum, "Blocking"))
+		--print(DictionaryHandler.findPlayer(hum, "Stunned"))
+		--print(DictionaryHandler.findPlayer(hum, "Busy"))
+		
+		game.ReplicatedStorage.CombatHit:FireClient(player, false)
+	end
+end)
+
+game.ReplicatedStorage.HeavyPunch.OnServerEvent:Connect(function(player)
+	local char = player.Character
+	local hum : Humanoid = char:FindFirstChild("Humanoid")
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	
+	if not DictionaryHandler.findPlayer(hum, "Stunned") and not DictionaryHandler.findPlayer(hum, "Blocking") and not DictionaryHandler.findPlayer(hum, "Busy") then
+		if not hum or hum.Health <= 0 then return end
+		if not hrp then return end
+		
+		DictionaryHandler.addTo(hum, "Busy")
+		local animator : Animator = hum:FindFirstChild("Animator")
+
+		if animator then
+			local animations = player.Backpack.CombatClient.Animations
+			local sounds = game.ReplicatedStorage.Sounds
+			
+			local anim : AnimationTrack = animator:LoadAnimation(animations.HeavyPunch)
+			local duration = anim.Length
+			local heavyPunchSound = sounds.HeavyPunch
+			
+			anim.Priority = Enum.AnimationPriority.Action4
+			anim:Play()
+			heavyPunchSound:Play()
+			task.spawn(function()
+				stunModule.stunPlayer(char, duration, false)
+			end)
+			doDamage(char, damageHeavyPunch, 0.27, heavyPunchBlockBreak) -- 0.27 = time it takes to wind the punch back
+			
+			task.wait(duration)
+			DictionaryHandler.removeFrom(hum, "Busy")	
+		end
+	end
+end)
+
+game.ReplicatedStorage.SuperPunch.OnServerEvent:Connect(function(player)
+	local char = player.Character
+	local hum : Humanoid = char:FindFirstChild("Humanoid")
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	
+	if not DictionaryHandler.findPlayer(hum, "Blocking") and not DictionaryHandler.findPlayer(hum, "Stunned") and not DictionaryHandler.findPlayer(hum, "Busy") and player.UserId == 105858383 then
+		if not hum or hum.Health <= 0 then return end
+		if not hrp then return end
+		DictionaryHandler.addTo(hum, "Busy")
+		
+		local animator : Animator = hum:FindFirstChild("Animator")
+		local animations = player.Backpack.CombatClient.Animations
+		local sounds = game.ReplicatedStorage.Sounds
+		
+		if animator then
+			local anim : AnimationTrack = animator:LoadAnimation(animations.SuperPunch)
+			anim.Priority = Enum.AnimationPriority.Action4
+			anim:Play()
+			
+			task.spawn(function()
+				task.wait(0.45)
+				sounds.SuperPunch:Play()
+			end)
+			task.spawn(function()
+				stunModule.stunPlayer(char, 0.57, false)
+			end)
+			doDamage(char, 99, 0.57, true)
+			task.wait(0.2)
+			DictionaryHandler.removeFrom(hum, "Busy")
+		end
+	end
+end)
+
+game.ReplicatedStorage.StatusAddition.OnServerEvent:Connect(function(player, status, duration)
+	local hum = player.Character:FindFirstChild("Humanoid")
+	
+	DictionaryHandler.addTo(hum, status)
+	task.wait(duration)
+	DictionaryHandler.removeFrom(hum, status)
+end)
+
+local allCheck = game.ReplicatedStorage.AllCheck
+
+game.ReplicatedStorage.AllCheck.OnServerEvent:Connect(function(player, blockCheck, stunCheck, busyCheck)
+	local hum = player.Character.Humanoid
+	
+	--Boolean checks
+	local ifBlocking = not DictionaryHandler.findPlayer(hum, "Blocking")
+	local ifStunned = not DictionaryHandler.findPlayer(hum, "Stunned")
+	local ifBusy = not DictionaryHandler.findPlayer(hum, "Busy")
+	
+	if ifBlocking == nil then 
+		ifBlocking = false
+	end
+	
+	if ifStunned == nil then 
+		ifStunned = false
+	end
+	
+	if ifBusy == nil then 
+		ifBusy = false
+	end
+	
+	local boolean
+	
+	if blockCheck and stunCheck and busyCheck then
+		boolean = ifBlocking and ifStunned and ifBusy
+	elseif blockCheck and stunCheck then
+		boolean = ifBlocking and ifStunned
+	elseif blockCheck and busyCheck then
+		boolean = ifBlocking and ifBusy
+	elseif stunCheck and busyCheck then
+		boolean = ifStunned and ifBusy
+	elseif blockCheck then
+		boolean = ifBlocking
+	elseif stunCheck then
+		boolean = ifStunned
+	elseif busyCheck then
+		boolean = ifBusy
+	end
+	
+	allCheck:FireClient(player, boolean)
+end)
