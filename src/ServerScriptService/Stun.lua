@@ -1,6 +1,10 @@
---Module Script
 local Stun = {}
 local DictionaryHandler = require(script.Parent.Library:WaitForChild("DictionaryHandler"))
+local plrsHit = {}
+local plrsSTUNNED = {
+	--player = {true}
+	
+}
 
 function Stun.stunPlayer(Char : Model, amountOfSecondsToStun : number, addStunEffect : boolean, blockBroken : boolean, parryStun : boolean)
 	if parryStun == nil then
@@ -14,17 +18,36 @@ function Stun.stunPlayer(Char : Model, amountOfSecondsToStun : number, addStunEf
 	if blockBroken == nil  then
 		blockBroken = false
 	end
-	local plrsHit = {}
-	local LIM = require(game.Players:GetPlayerFromCharacter(Char).Backpack.LocalInfo)
+	if game:GetService("RunService"):IsClient() then print("client") end
+	local playerDataManager = require(game.ServerScriptService.ServerModules.PlayerDataManager)
 	local enemyHumanoid : Humanoid = Char:FindFirstChild("Humanoid")
 	local enemyPlayer = game.Players:GetPlayerFromCharacter(Char)
+	local playerData_RO = playerDataManager:getReadOnly(enemyPlayer)
 	
 	if enemyHumanoid then
-		if LIM.secondsBeingStunnedFor < amountOfSecondsToStun then
-			plrsHit[enemyHumanoid] = amountOfSecondsToStun * 10
-		else
-			plrsHit[enemyHumanoid] = LIM.secondsBeingStunnedFor * 10
+		if plrsSTUNNED[enemyPlayer] == nil then
+			plrsSTUNNED[enemyPlayer] = false
 		end
+		
+		if plrsHit[enemyHumanoid] then
+			if plrsHit[enemyHumanoid] < amountOfSecondsToStun then
+				plrsHit[enemyHumanoid] = amountOfSecondsToStun * 10
+			else
+				return
+			end
+		else
+			plrsHit[enemyHumanoid] = amountOfSecondsToStun * 10
+		end
+		
+		if plrsSTUNNED[enemyPlayer] == true then
+			if plrsHit[enemyHumanoid] < amountOfSecondsToStun * 10 then
+				plrsHit[enemyHumanoid] = amountOfSecondsToStun * 10
+			end
+			return
+		end
+		
+		plrsSTUNNED[enemyPlayer] = true
+		
 		if addStunEffect then
 			DictionaryHandler.addTo(enemyHumanoid, "Stunned")
 		end
@@ -55,13 +78,15 @@ function Stun.stunPlayer(Char : Model, amountOfSecondsToStun : number, addStunEf
 		end
 		
 		while task.wait(0.1) do
-			if LIM.parried and not parryStun then
+			if plrsSTUNNED[enemyPlayer] == false then
+				break
+			end
+			if playerDataManager:getParried(enemyPlayer) and not parryStun then
 				break
 			end
 			
 			if plrsHit[enemyHumanoid] > 0 then
 				plrsHit[enemyHumanoid] -= 1
-				LIM.secondsBeingStunnedFor = plrsHit[enemyHumanoid] / 10
 			else
 				plrsHit[enemyHumanoid] = nil
 				if addStunEffect then
@@ -72,6 +97,16 @@ function Stun.stunPlayer(Char : Model, amountOfSecondsToStun : number, addStunEf
 				break
 			end
 		end
+		
+		--clean up
+		plrsSTUNNED[enemyPlayer] = false
+		plrsHit[enemyHumanoid] = nil
+		if addStunEffect then
+			DictionaryHandler.removeFrom(enemyHumanoid, "Stunned")
+		end
+		enemyHumanoid.WalkSpeed = 16
+		enemyHumanoid.JumpPower = 50
+
 	end
 end
 
