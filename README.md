@@ -1,4 +1,4 @@
-# FIghting Game Project
+# Fighting Game
 
 A small project I started for fun!
 
