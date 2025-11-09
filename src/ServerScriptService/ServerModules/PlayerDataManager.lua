@@ -1,4 +1,3 @@
---Module Script
 local PlayerDataManager = {}
 
 local RunService = game:GetService("RunService")
@@ -76,7 +75,7 @@ function PlayerDataManager:getOriginalPlayerDataTable(player : Player)
 end
 
 --[[
-	Get a copy of the player data of a player
+	Get a copy of the player data of a player, this copy does not get updated
 	@param player : Player
 	@return playerData[player] : PlayerInfo
 	@return nil if the player data is not found
@@ -109,6 +108,22 @@ function PlayerDataManager:getReadOnly(player : Player)
 		dodgeAmount = playerData[player].dodgeAmount,
 		Moves = table.clone(playerData[player].Moves)
 	}
+end
+
+--[[
+	Get the 'parried' value of a player
+	@param player : Player
+	@return playerData[player].parried : boolean
+]]
+function PlayerDataManager:getParried(player)
+	if RunService:IsClient() then
+		warn("CANNOT RUN ON CLIENT! FIX")
+		return
+	end
+	local data = playerData[player]
+	if not data then return nil end
+	local temp = data.parried
+	return temp
 end
 
 --[[
