@@ -1,4 +1,3 @@
---Module Sript
 -- PlayerInfo (server-side class)
 local PlayerInfo = {}
 PlayerInfo.__index = PlayerInfo
